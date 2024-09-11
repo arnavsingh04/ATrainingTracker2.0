@@ -32,7 +32,7 @@ import com.atrainingtracker.banalservice.sensor.formater.PaceFormatter;
 import com.atrainingtracker.banalservice.sensor.formater.SpeedFormatter;
 import com.atrainingtracker.banalservice.sensor.formater.TimeFormatter;
 import com.atrainingtracker.trainingtracker.TrainingApplication;
-
+import com.atrainingtracker.banalservice.sensor.formater.LatLongFormatter;
 public enum SensorType
         implements Parcelable {
     ACCUMULATED_SENSORS(R.string.accumulated_sensors, R.string.accumulated_sensors_short, R.string.units_none, SensorValueType.STRING, new DefaultStringFormatter(), false),
@@ -58,11 +58,12 @@ public enum SensorType
     LINE_DISTANCE_m(R.string.line_distance, R.string.line_distance_short, R.string.units_distance_basic, SensorValueType.DOUBLE, new DistanceFormatter(), false),
     HR(R.string.heart_rate, R.string.heart_rate_short, R.string.units_heart_rate, SensorValueType.INTEGER, new IntegerFormatter(), true),
     LAP_NR(R.string.lap_number, R.string.lap_number_short, R.string.units_none, SensorValueType.INTEGER, new IntegerFormatter(), false),
-    LATITUDE(R.string.latitude, R.string.latitude_short, R.string.units_none, SensorValueType.DOUBLE, new DefaultNumberFormatter(), true),
+    LATITUDE(R.string.latitude, R.string.latitude_short, R.string.units_none, SensorValueType.DOUBLE, new LatLongFormatter(), true),
     // LATITUDE_gps           (R.string.latitude,               R.string.latitude_short,               R.string.units_none,            SensorValueType.DOUBLE,  new DefaultNumberFormatter()),
     // LATITUDE_network       (R.string.latitude,               R.string.latitude_short,               R.string.units_none,            SensorValueType.DOUBLE,  new DefaultNumberFormatter()),
     // LATITUDE_google_fused  (R.string.latitude,               R.string.latitude_short,               R.string.units_none,            SensorValueType.DOUBLE,  new DefaultNumberFormatter()),
-    LONGITUDE(R.string.longitude, R.string.longitude_short, R.string.units_none, SensorValueType.DOUBLE, new DefaultNumberFormatter(), true),
+    LONGITUDE(R.string.longitude, R.string.longitude_short, R.string.units_none, SensorValueType.DOUBLE, new LatLongFormatter(), true),
+
     // LONGITUDE_gps          (R.string.longitude,              R.string.longitude_short,              R.string.units_none,            SensorValueType.DOUBLE,  new DefaultNumberFormatter()),
     // LONGITUDE_network      (R.string.longitude,              R.string.longitude_short,              R.string.units_none,            SensorValueType.DOUBLE,  new DefaultNumberFormatter()),
     // LONGITUDE_google_fused (R.string.longitude,              R.string.longitude_short,              R.string.units_none,            SensorValueType.DOUBLE,  new DefaultNumberFormatter()),
