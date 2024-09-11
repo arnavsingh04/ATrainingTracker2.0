@@ -41,7 +41,7 @@ public class SpeedAndLocationDevice_GoogleFused extends SpeedAndLocationDevice
         implements GoogleApiClient.ConnectionCallbacks,
         GoogleApiClient.OnConnectionFailedListener,
         LocationListener {
-    private static final String TAG = "SpeedAndLocationDevice_GoogleFused";
+    private static final String TAG = "SAND_GoogleFused";
     private static final boolean DEBUG = BANALService.DEBUG & false;
     private static final int PERMISSION_REQUEST_CODE = 100; // Or any unique integer value
     private final Context context;
