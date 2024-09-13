@@ -20,8 +20,11 @@ package com.atrainingtracker.trainingtracker.dialogs;
 
 import android.app.Activity;
 import android.app.Dialog;
+import android.content.Context;
 import android.content.DialogInterface;
 import android.os.Bundle;
+import android.util.Log;
+import android.widget.Toast;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.DialogFragment;
@@ -41,39 +44,72 @@ public class StartOrResumeDialog extends DialogFragment {
     private StartOrResumeInterface mStartOrResumeInterface;
 
     @Override
-    public void onAttach(Activity activity) {
-        super.onAttach(activity);
+    public void onAttach(Context context) {
+        super.onAttach(context);
         // Verify that the host activity implements the callback interface
         try {
-            // Instantiate the NoticeDialogListener so we can send events to the host
-            mStartOrResumeInterface = (StartOrResumeInterface) activity;
+            // Instantiate the StartOrResumeInterface so we can send events to the host
+            if (context instanceof StartOrResumeInterface) {
+                mStartOrResumeInterface = (StartOrResumeInterface) context;
+            } else {
+                throw new ClassCastException(context.toString() + " must implement StartOrResumeInterface");
+            }
         } catch (ClassCastException e) {
-            // The activity doesn't implement the interface, throw exception
-            throw new ClassCastException(activity.toString() + " must implement ChooseStartOrResumeInterface");
+            // Handle the exception if the context does not implement the required interface
+            throw new ClassCastException(context.toString() + " must implement StartOrResumeInterface");
         }
     }
 
+
     @Override
     public Dialog onCreateDialog(Bundle savedInstanceState) {
-
         AlertDialog.Builder alertDialogBuilder = new AlertDialog.Builder(getContext());
+
+        // Set the message for the dialog
         alertDialogBuilder.setMessage(R.string.start_or_resume_dialog_message);
-        // alertDialogBuilder.setCancelable(false);
+
+        // Set up the positive button and its click listener
         alertDialogBuilder.setPositiveButton(R.string.start_new_workout, new DialogInterface.OnClickListener() {
             public void onClick(DialogInterface dialog, int id) {
-                mStartOrResumeInterface.chooseStart();
-                dialog.cancel();
+                try {
+                    if (mStartOrResumeInterface != null) {
+                        mStartOrResumeInterface.chooseStart();
+                    } else {
+                        Log.e("DialogError", "mStartOrResumeInterface is null");
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace(); // Log the exception
+                    Log.e("DialogError", "Error while choosing start workout", e);
+                    Toast.makeText(getContext(), "Error starting workout", Toast.LENGTH_SHORT).show();
+                } finally {
+                    dialog.cancel(); // Ensure dialog is canceled
+                }
             }
         });
 
+        // Set up the negative button and its click listener
         alertDialogBuilder.setNegativeButton(R.string.resume_workout, new DialogInterface.OnClickListener() {
             public void onClick(DialogInterface dialog, int id) {
-                mStartOrResumeInterface.chooseResume();
-                dialog.cancel();
-
+                try {
+                    if (mStartOrResumeInterface != null) {
+                        mStartOrResumeInterface.chooseResume();
+                    } else {
+                        Log.e("DialogError", "mStartOrResumeInterface is null");
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace(); // Log the exception
+                    Log.e("DialogError", "Error while choosing resume workout", e);
+                    Toast.makeText(getContext(), "Error resuming workout", Toast.LENGTH_SHORT).show();
+                } finally {
+                    dialog.cancel(); // Ensure dialog is canceled
+                }
             }
         });
 
-        return alertDialogBuilder.create();
+        // Create and return the dialog
+        AlertDialog dialog = alertDialogBuilder.create();
+        // Optionally, you can add more dialog configurations here
+
+        return dialog;
     }
 }
