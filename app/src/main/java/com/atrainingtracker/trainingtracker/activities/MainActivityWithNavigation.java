@@ -110,6 +110,7 @@ import com.google.android.gms.common.GooglePlayServicesUtil;
 
 import java.util.LinkedList;
 import java.util.List;
+import android.os.Looper;
 
 // import android.support.v7.app.AlertDialog;
 
@@ -139,6 +140,7 @@ public class MainActivityWithNavigation
     private static final String TAG = "com.atrainingtracker.trainingtracker.MainActivityWithNavigation";
     private static final boolean DEBUG = TrainingApplication.DEBUG && false;
     private static final int DEFAULT_SELECTED_FRAGMENT_ID = R.id.drawer_start_tracking;
+
     // private static final int REQUEST_ENABLE_BLUETOOTH            = 1;
     private static final int REQUEST_INSTALL_GOOGLE_PLAY_SERVICE = 2;
     private static final int MY_PERMISSIONS_REQUEST_ACCESS_FINE_LOCATION = 1;
@@ -922,14 +924,32 @@ public class MainActivityWithNavigation
     public void chooseStart() {
         TrainingApplication.setResumeFromCrash(false);
 
-        TextView tv = findViewById(R.id.tvStart);
-        if (tv != null) {
-            tv.setText(R.string.start_new_workout);
-        }
-        mqttHandler = new MqttHandler();
-        mqttHandler.connect(BROKER_URL, CLIENT_ID);
-        Log.d("MQTT CONNECT", "mqtt handler has been created");
-        publishMessage("house/bulb", "testMessage2" );
+        new Handler(Looper.getMainLooper()).post(new Runnable() {
+            @Override
+            public void run() {
+                TextView tv = findViewById(R.id.tvStart);
+                if (tv != null) {
+                    tv.setText(R.string.start_new_workout);
+                }
+            }
+        });
+        // Start background task for MQTT connection and message publishing
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    // Initialize and connect MQTT handler
+                    mqttHandler = new MqttHandler();
+                    mqttHandler.connect(BROKER_URL, CLIENT_ID);
+                    Log.d("MQTT CONNECT", "MQTT handler has been created and connected");
+                    // Publish a message after connection is established
+                    publishMessage("house/bulb", "testMessage2");
+                } catch (Exception e) {
+                    // Log any exceptions that occur during MQTT operations
+                    Log.e("MQTT ERROR", "Error in MQTT operations", e);
+                }
+            }
+        }).start();
     }
 
     @Override
@@ -946,7 +966,11 @@ public class MainActivityWithNavigation
     private void publishMessage(String topic, String message){
         Toast.makeText(this, "Publishing message " + message, Toast.LENGTH_SHORT).show();
         mqttHandler.publish(topic, message);
+        if (mqttHandler != null) {
+            mqttHandler.publish(topic, message);
+        }
         Log.d("PUBLISH", "string has been published");
+
     }
 
     private void subscribeToTopic(String topic){
