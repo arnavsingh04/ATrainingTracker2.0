@@ -19,8 +19,13 @@
 package com.atrainingtracker.trainingtracker.activities;
 
 import android.Manifest;
+
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
+
 import android.app.Dialog;
+import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothManager;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
@@ -29,12 +34,24 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
 import android.content.pm.ActivityInfo;
+import android.content.pm.PackageManager;
+import android.location.Location;
+import android.location.LocationListener;
 import android.location.LocationManager;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
+
+import com.google.android.gms.common.GoogleApiAvailability;
+import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.location.FusedLocationProviderClient;
+import com.google.android.gms.location.LocationCallback;
+import com.google.android.gms.location.LocationRequest;
+import com.google.android.gms.location.LocationResult;
+import com.google.android.gms.location.LocationServices;
 import com.google.android.material.navigation.NavigationView;
+
 import androidx.core.app.ActivityCompat;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentTransaction;
@@ -46,6 +63,9 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.preference.PreferenceFragmentCompat;
 import androidx.preference.PreferenceScreen;
 import androidx.appcompat.widget.Toolbar;
+
+import android.os.Looper;
+import android.provider.Settings;
 import android.util.Log;
 import android.view.MenuItem;
 import android.view.WindowManager;
@@ -131,12 +151,12 @@ public class MainActivityWithNavigation
         StartAndTrackingFragmentTabbedContainer.UpdateActivityTypeInterface,
         StarredSegmentsListFragment.StartSegmentDetailsActivityInterface,
         StartOrResumeInterface {
-    private static final String BROKER_URL = "tcp://192.168.0.229:1883";
+    private static final String BROKER_URL = "tcp://101.119.143.227";
     private MqttHandler mqttHandler;
     private static final String CLIENT_ID = "client_id";
     public static final String SELECTED_FRAGMENT_ID = "SELECTED_FRAGMENT_ID";
     public static final String SELECTED_FRAGMENT = "SELECTED_FRAGMENT";
-    private static final String TAG = "com.atrainingtracker.trainingtracker.MainActivityWithNavigation";
+    private static final String TAG = "MainActivityNavigation";
     private static final boolean DEBUG = TrainingApplication.DEBUG && false;
     private static final int DEFAULT_SELECTED_FRAGMENT_ID = R.id.drawer_start_tracking;
     // private static final int REQUEST_ENABLE_BLUETOOTH            = 1;
@@ -147,8 +167,12 @@ public class MainActivityWithNavigation
     private static final int MY_PERMISSIONS_REQUEST_ACCESS_FINE_LOCATION_AND_WRITE_EXTERNAL_STORAGE = 4;
     private static final long WAITING_TIME_BEFORE_DISCONNECTING = 5 * 60 * 1000; // 5 min
     private static final int CRITICAL_BATTERY_LEVEL = 30;
+    private LocationRequest locationRequest;
+    private static final int REQUEST_ENABLE_BLUETOOTH = 1;
     protected TrainingApplication mTrainingApplication;
     // remember which fragment should be shown
+    private FusedLocationProviderClient fusedLocationClient;
+    private LocationCallback locationCallback;
     protected int mSelectedFragmentId = DEFAULT_SELECTED_FRAGMENT_ID;
     // the views
     protected DrawerLayout mDrawerLayout;
@@ -159,7 +183,9 @@ public class MainActivityWithNavigation
     protected boolean mStartAndNotResume = true;        // start a new workout or continue with the previous one
     protected BANALService.BANALServiceComm mBanalServiceComm = null;
     LinkedList<ConnectionStatusListener> mConnectionStatusListeners = new LinkedList<>();
+    private LocationManager locationManager;
     /* Broadcast Receiver to adapt the title based on the tracking state */
+    private static final int REQUEST_LOCATION_PERMISSION = 1;
     BroadcastReceiver mStartTrackingReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -310,24 +336,213 @@ public class MainActivityWithNavigation
                 showGPSDisabledAlertToUser();
             }
         }
+        createLocationRequest();
 
-        // TODO: better place for this code?
-        // PROBLEM: when play service is not installed, DeviceManager will start the unfiltered GPS.
-        //          when then the play service is installed, the DeviceManager will not use the newly available filtered GPS stuff
+        // Check for permissions and start location updates
+        checkLocationPermissions();
+        int playServicesStatus = GooglePlayServicesUtil.isGooglePlayServicesAvailable(this);
 
-        // check whether the google play service utils are installed
-        Dialog dialog = GooglePlayServicesUtil.getErrorDialog(GooglePlayServicesUtil.isGooglePlayServicesAvailable(this), this, REQUEST_INSTALL_GOOGLE_PLAY_SERVICE);
-        if (dialog != null) {  // so there is a problem with the Google Play Service
-            // since there is no 'no' and 'do not ask again' button, we show this only several times, see the corresponding function of TrainingApplication
-            if (TrainingApplication.showInstallPlayServicesDialog()) {
-                dialog.show();
+        if (playServicesStatus != ConnectionResult.SUCCESS) {
+            Dialog dialog = GooglePlayServicesUtil.getErrorDialog(playServicesStatus, this, REQUEST_INSTALL_GOOGLE_PLAY_SERVICE);
+            if (dialog != null) {
+                if (TrainingApplication.showInstallPlayServicesDialog()) {
+                    dialog.show();
+                }
+                // Start unfiltered GPS if Google Play Services are not available
+                startUnfilteredGPS();
             }
+        } else {
+            // Use filtered GPS when Google Play Services are available
+            startFilteredGPS();
+        }
+
+        registerReceiver(playServicesReceiver, new IntentFilter(GoogleApiAvailability.GOOGLE_PLAY_SERVICES_PACKAGE));
+    }
+
+    private BroadcastReceiver playServicesReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            // Check if Google Play Services is available
+            if (GooglePlayServicesUtil.isGooglePlayServicesAvailable(context) == ConnectionResult.SUCCESS) {
+                // Google Play Services are available
+                startFilteredGPS(); // Call your method to start using filtered GPS
+            } else {
+                // Handle the case where Google Play Services are not available
+                Toast.makeText(context, "Google Play Services not available", Toast.LENGTH_SHORT).show();
+            }
+        }
+    };
+
+
+    private void checkLocationPermissions() {
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
+                ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+
+            // Request permissions if not granted
+            ActivityCompat.requestPermissions(this,
+                    new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION},
+                    REQUEST_LOCATION_PERMISSION);
+        } else {
+            // Permissions are granted; request location updates
+            startLocationUpdates();
+        }
+    }
+
+    private void startLocationUpdates() {
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
+
+        // Start requesting location updates
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
+                ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+
+            ActivityCompat.requestPermissions(this,
+                    new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION},
+                    REQUEST_LOCATION_PERMISSION);
+
+            return;
+        }
+
+        fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper());
+    }
+
+
+        private void startFilteredGPS() {
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
+
+        // Create a LocationRequest with the desired accuracy and interval
+        LocationRequest locationRequest = LocationRequest.create()
+                .setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY)
+                .setInterval(5000)      // 5 seconds between location updates
+                .setFastestInterval(2000);  // 2 seconds for the fastest updates
+
+        // Define a LocationCallback to handle the location updates
+        locationCallback = new LocationCallback() {
+            @Override
+            public void onLocationResult(LocationResult locationResult) {
+                if (locationResult == null) {
+                    return;
+                }
+                for (Location location : locationResult.getLocations()) {
+                    // Handle each location update (filtered GPS)
+                    updateLocationUI(location);
+                }
+            }
+        };
+
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
+                ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+
+            // Request the missing permissions
+            ActivityCompat.requestPermissions(this,
+                    new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION},
+                    REQUEST_LOCATION_PERMISSION); // Define REQUEST_LOCATION_PERMISSION as a constant integer
+            return; // Exit the method as permission has not been granted yet
+        }
+
+// If permissions are already granted, request location updates
+        fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper());
+
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+
+        if (requestCode == REQUEST_LOCATION_PERMISSION) {
+            // Check if the permission request was granted
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                // Permission was granted, proceed with requesting location updates
+                if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+                        ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                    fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper());
+                }
+            } else {
+                // Permission was denied. Handle the case where location permission is denied (e.g., show a message to the user)
+                Toast.makeText(this, "Location permission denied", Toast.LENGTH_SHORT).show();
+            }
+        }
+    }
+
+    private void createLocationRequest() {
+        locationRequest = LocationRequest.create();
+        locationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY); // Use high accuracy
+        locationRequest.setInterval(5000); // Set the desired interval for active location updates
+        locationRequest.setFastestInterval(2000); // Set the fastest interval for location updates
+        locationRequest.setSmallestDisplacement(10); // Set the minimum displacement for updates (10 meters)
+    }
+
+    private void startUnfilteredGPS() {
+        // Get the LocationManager service
+        locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+
+        // Check if the GPS provider is enabled
+        if (locationManager != null && locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+            // Request location updates from the GPS provider
+            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                // TODO: Consider calling
+                //    ActivityCompat#requestPermissions
+                // here to request the missing permissions, and then overriding
+                //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+                //                                          int[] grantResults)
+                // to handle the case where the user grants the permission. See the documentation
+                // for ActivityCompat#requestPermissions for more details.
+                return;
+            }
+            locationManager.requestLocationUpdates(
+                    LocationManager.GPS_PROVIDER, // Unfiltered GPS provider
+                    5000L,                        // Minimum time interval between updates (milliseconds)
+                    10.0f,                        // Minimum distance interval between updates (meters)
+                    locationListener               // Listener to handle location updates
+            );
+        } else {
+            // Handle the case where GPS is disabled
+            Toast.makeText(this, "GPS is not enabled. Please enable GPS.", Toast.LENGTH_LONG).show();
+            // Optionally, direct the user to the location settings screen
+            Intent intent = new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS);
+            startActivity(intent);
+        }
+    }
+
+    // Define the LocationListener for unfiltered GPS updates
+    private LocationListener locationListener = new LocationListener() {
+        @Override
+        public void onLocationChanged(Location location) {
+            // Handle location updates (unfiltered GPS)
+            updateLocationUI(location);
+        }
+
+        @Override
+        public void onStatusChanged(String provider, int status, Bundle extras) { }
+
+        @Override
+        public void onProviderEnabled(String provider) { }
+
+        @Override
+        public void onProviderDisabled(String provider) { }
+    };
+
+    private void updateLocationUI(Location location) {
+        // Your code to handle location updates and display the information in the UI
+        // Example:
+        double latitude = location.getLatitude();
+        double longitude = location.getLongitude();
+        Log.d("Location Update", "Lat: " + latitude + ", Lon: " + longitude);
+    }
+
+    // Method to stop unfiltered GPS updates
+    private void stopUnfilteredGPS() {
+        if (locationManager != null) {
+            locationManager.removeUpdates(locationListener);
         }
     }
 
     @Override
     protected void onResume() {
         super.onResume();
+        startUnfilteredGPS();
+        IntentFilter filter = new IntentFilter();
+        filter.addAction("com.yourapp.PLAY_SERVICES_ACTION"); // Use the appropriate action
+        registerReceiver(playServicesReceiver, filter);
         if (DEBUG) Log.d(TAG, "onResume");
 
         if (mBanalServiceComm == null) {
@@ -357,34 +572,38 @@ public class MainActivityWithNavigation
         upgradeDropboxV2();
     }
 
-    // method to verify the preferences
-    // when we shall upload to a platform there must be a token.
-    // TODO: inform user when the settings are not valid?
     protected void checkPreferences() {
-        // BUT not Dropbox since this case is part of the Auth procedure...
-        // if (TrainingApplication.uploadToDropbox() && TrainingApplication.getDropboxToken() == null) {
-        //     TrainingApplication.setUploadToDropbox(false);
-        // }
+        boolean validSettings = true; // Flag to track if all settings are valid
 
-        if (TrainingApplication.uploadToStrava() && TrainingApplication.getStravaAccessToken() == null) {
-            TrainingApplication.setUploadToStrava(false);
+        // Check Strava settings
+        if (TrainingApplication.uploadToStrava()) {
+            if (TrainingApplication.getStravaAccessToken() == null) {
+                TrainingApplication.setUploadToStrava(false);
+                validSettings = false; // Mark as invalid
+            } else if (TrainingApplication.getStravaTokenExpiresAt() == 0) {
+                Log.i(TAG, "Migrating to new Strava OAuth");
+                startActivityForResult(new Intent(this, StravaGetAccessTokenActivity.class), StravaUploadFragment.GET_STRAVA_ACCESS_TOKEN);
+            }
         }
 
-        if (TrainingApplication.uploadToStrava() && TrainingApplication.getStravaTokenExpiresAt() == 0) {
-            Log.i(TAG, "migrating to new Strava OAuth");
-            // TrainingApplication.setStravaTokenExpiresAt(1); // avoid starting the StravaGetAccessToken Activity again and again...
-            startActivityForResult(new Intent(this, StravaGetAccessTokenActivity.class), StravaUploadFragment.GET_STRAVA_ACCESS_TOKEN);
-        }
-
+        // Check RunKeeper settings
         if (TrainingApplication.uploadToRunKeeper() && TrainingApplication.getRunkeeperToken() == null) {
             TrainingApplication.setUploadToRunkeeper(false);
+            validSettings = false; // Mark as invalid
         }
 
+        // Check TrainingPeaks settings
         if (TrainingApplication.uploadToTrainingPeaks() && TrainingApplication.getTrainingPeaksRefreshToken() == null) {
             TrainingApplication.setUploadToTrainingPeaks(false);
+            validSettings = false; // Mark as invalid
         }
 
+        // Inform the user if any settings are invalid
+        if (!validSettings) {
+            Toast.makeText(this, "Some settings are invalid. Please check your authentication tokens.", Toast.LENGTH_LONG).show();
+        }
     }
+
 
     protected void upgradeDropboxV2() {
         if (TrainingApplication.uploadToDropbox() && !TrainingApplication.hasDropboxToken()) {
@@ -419,40 +638,73 @@ public class MainActivityWithNavigation
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        if (DEBUG)
+        if (DEBUG) {
             Log.i(TAG, "onActivityResult: requestCode=" + requestCode + ", resultCode=" + resultCode);
+        }
 
         switch (requestCode) {
             case REQUEST_INSTALL_GOOGLE_PLAY_SERVICE:
                 if (GooglePlayServicesUtil.isGooglePlayServicesAvailable(this) == ConnectionResult.SUCCESS) {
-                    // TODO: now, google play service is available, inform DeviceManager to change the shit
+                    // Google Play services are now available
+                    // Initialize your services here, e.g., GoogleApiClient
+                    // For example:
+                    GoogleApiClient googleApiClient = new GoogleApiClient.Builder(this)
+                            .addApi(LocationServices.API)
+                            .addConnectionCallbacks(new GoogleApiClient.ConnectionCallbacks() {
+                                @Override
+                                public void onConnected(Bundle bundle) {
+                                    // Connection successful, do something
+                                }
+
+                                @Override
+                                public void onConnectionSuspended(int i) {
+                                    // Connection suspended
+                                }
+                            })
+                            .addOnConnectionFailedListener(new GoogleApiClient.OnConnectionFailedListener() {
+                                @Override
+                                public void onConnectionFailed(ConnectionResult connectionResult) {
+                                    // Connection failed
+                                }
+                            })
+                            .build();
+
+                    googleApiClient.connect();
                 } else {
-                    // TODO: failed to install google play service
+                    // Failed to install Google Play services
+                    Toast.makeText(this, "Failed to install Google Play services. Please try again.", Toast.LENGTH_LONG).show();
                 }
                 break;
 
+            case REQUEST_ENABLE_BLUETOOTH:
+                BluetoothManager bluetoothManager = null;
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.JELLY_BEAN_MR2) {
+                    bluetoothManager = (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
+                }
+                BluetoothAdapter bluetoothAdapter = null;
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.JELLY_BEAN_MR2) {
+                    bluetoothAdapter = bluetoothManager.getAdapter();
+                }
 
-//            case REQUEST_ENABLE_BLUETOOTH:
-//                // TODO: copied code from ControlTrackingFragment
-//                BluetoothManager bluetoothManager = (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
-//                BluetoothAdapter bluetoothAdapter = bluetoothManager.getAdapter();
-//
-//                // TODO: some more tries, then write own dialog and enable Bluetooth via enableBluetoothRequest()
-//                if (bluetoothAdapter.isEnabled() ) {
-//                    if (DEBUG) Log.i(TAG, "Bluetooth is now enabled");
-//                    startPairing(Protocol.BLUETOOTH_LE);
-//                }
-//                else {
-//                    if (DEBUG) Log.i(TAG, "Bluetooth is NOT enabled");
-//                }
-//
-//                break;
+                if (resultCode == RESULT_OK) {
+                    // Bluetooth is now enabled
+                    if (bluetoothAdapter != null && bluetoothAdapter.isEnabled()) {
+                        if (DEBUG) Log.i(TAG, "Bluetooth is now enabled");
+                        startPairing(Protocol.BLUETOOTH_LE); // Start pairing process
+                    }
+                } else {
+                    // User did not enable Bluetooth
+                    if (DEBUG) Log.i(TAG, "Bluetooth is NOT enabled");
+                    Toast.makeText(this, "Bluetooth is required for this feature.", Toast.LENGTH_SHORT).show();
+                }
+                break;
 
-            default:  // maybe someone else (like fragments) might be able to handle this
+            default: // Handle other request codes or let fragments handle it
                 if (DEBUG) Log.i(TAG, "requestCode not handled");
                 super.onActivityResult(requestCode, resultCode, data);
         }
     }
+
 
     @Override
     public void onSaveInstanceState(Bundle savedInstanceState) {
@@ -471,6 +723,8 @@ public class MainActivityWithNavigation
     @Override
     protected void onPause() {
         super.onPause();
+        stopUnfilteredGPS();
+        unregisterReceiver(playServicesReceiver);
         if (DEBUG) Log.d(TAG, "onPause");
 
         try {
@@ -920,17 +1174,41 @@ public class MainActivityWithNavigation
     /* Implementation of the StartOrResumeInterface                                                */
     @Override
     public void chooseStart() {
+        // Set flag to indicate a new workout should be started
         TrainingApplication.setResumeFromCrash(false);
 
-        TextView tv = findViewById(R.id.tvStart);
-        if (tv != null) {
-            tv.setText(R.string.start_new_workout);
-        }
-        mqttHandler = new MqttHandler();
-        mqttHandler.connect(BROKER_URL, CLIENT_ID);
-        Log.d("MQTT CONNECT", "mqtt handler has been created");
-        publishMessage("house/bulb", "testMessage2" );
+        // Update the UI on the main thread using an anonymous inner class
+        new Handler(Looper.getMainLooper()).post(new Runnable() {
+            @Override
+            public void run() {
+                TextView tv = findViewById(R.id.tvStart);
+                if (tv != null) {
+                    tv.setText(R.string.start_new_workout);
+                }
+            }
+        });
+
+        // Start background task for MQTT connection and message publishing
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    // Initialize and connect MQTT handler
+                    mqttHandler = new MqttHandler();
+                    mqttHandler.connect(BROKER_URL, CLIENT_ID);
+                    Log.d("MQTT CONNECT", "MQTT handler has been created and connected");
+
+                    // Publish a message after connection is established
+                    publishMessage("house/bulb", "testMessage2");
+                } catch (Exception e) {
+                    // Log any exceptions that occur during MQTT operations
+                    Log.e("MQTT ERROR", "Error in MQTT operations", e);
+                }
+            }
+        }).start();
     }
+
+
 
     @Override
     public void chooseResume() {
@@ -945,7 +1223,9 @@ public class MainActivityWithNavigation
 
     private void publishMessage(String topic, String message){
         Toast.makeText(this, "Publishing message " + message, Toast.LENGTH_SHORT).show();
-        mqttHandler.publish(topic, message);
+        if (mqttHandler != null) {
+            mqttHandler.publish(topic, message);
+        }
         Log.d("PUBLISH", "string has been published");
     }
 
