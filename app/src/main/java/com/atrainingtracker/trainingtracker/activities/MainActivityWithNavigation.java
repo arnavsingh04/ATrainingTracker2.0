@@ -161,6 +161,7 @@ public class MainActivityWithNavigation
     private static final int DEFAULT_SELECTED_FRAGMENT_ID = R.id.drawer_start_tracking;
     // private static final int REQUEST_ENABLE_BLUETOOTH            = 1;
     private static final int REQUEST_INSTALL_GOOGLE_PLAY_SERVICE = 2;
+    private static final int REQUEST_ENABLE_BT = 1; // You can use any integer value here
     private static final int MY_PERMISSIONS_REQUEST_ACCESS_FINE_LOCATION = 1;
     private static final int MY_PERMISSIONS_REQUEST_WRITE_EXTERNAL_STORAGE = 2;
     // private static final int MY_PERMISSIONS_REQUEST_READ_PHONE_STATE       = 3;
@@ -684,6 +685,16 @@ public class MainActivityWithNavigation
                 BluetoothAdapter bluetoothAdapter = null;
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.JELLY_BEAN_MR2) {
                     bluetoothAdapter = bluetoothManager.getAdapter();
+                    if (bluetoothAdapter == null) {
+                        // Device doesn't support Bluetooth
+                        Log.e("Bluetooth", "Device does not support Bluetooth");
+                    } else {
+                        if (!bluetoothAdapter.isEnabled()) {
+                            // Request to enable Bluetooth
+                            Intent enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
+                            startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT);
+                        }
+                    }
                 }
 
                 if (resultCode == RESULT_OK) {
