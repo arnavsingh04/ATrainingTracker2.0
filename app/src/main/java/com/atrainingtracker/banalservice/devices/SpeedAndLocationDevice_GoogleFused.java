@@ -18,16 +18,10 @@
 
 package com.atrainingtracker.banalservice.devices;
 
-import android.Manifest;
-import android.app.Activity;
 import android.content.Context;
-import android.content.pm.PackageManager;
 import android.location.Location;
 import android.os.Bundle;
 import android.util.Log;
-
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
 
 import com.atrainingtracker.banalservice.BANALService;
 import com.atrainingtracker.banalservice.sensor.MySensorManager;
@@ -43,8 +37,6 @@ public class SpeedAndLocationDevice_GoogleFused extends SpeedAndLocationDevice
         LocationListener {
     private static final String TAG = "SpeedAndLocationDevice_GoogleFused";
     private static final boolean DEBUG = BANALService.DEBUG & false;
-    private static final int PERMISSION_REQUEST_CODE = 100; // Or any unique integer value
-    private final Context context;
 
     protected GoogleApiClient mGoogleApiClient;
 
@@ -52,8 +44,6 @@ public class SpeedAndLocationDevice_GoogleFused extends SpeedAndLocationDevice
 
     public SpeedAndLocationDevice_GoogleFused(Context context, MySensorManager mySensorManager) {
         super(context, mySensorManager, DeviceType.SPEED_AND_LOCATION_GOOGLE_FUSED);
-        this.context = context;
-
         if (DEBUG) {
             Log.d(TAG, "constructor");
         }
@@ -82,16 +72,7 @@ public class SpeedAndLocationDevice_GoogleFused extends SpeedAndLocationDevice
     public void onConnected(Bundle dataBundle) {
         if (DEBUG) Log.d(TAG, "onConnected()");
 
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-            LocationServices.FusedLocationApi.requestLocationUpdates(mGoogleApiClient, mLocationRequest, this);
-        } else {
-            // Handle the case where permission is not granted
-            ActivityCompat.requestPermissions((Activity) context,
-                    new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
-                    PERMISSION_REQUEST_CODE);
-        }
-        //LocationServices.FusedLocationApi.requestLocationUpdates(mGoogleApiClient, mLocationRequest, this);
-
+        LocationServices.FusedLocationApi.requestLocationUpdates(mGoogleApiClient, mLocationRequest, this);
     }
 
 
