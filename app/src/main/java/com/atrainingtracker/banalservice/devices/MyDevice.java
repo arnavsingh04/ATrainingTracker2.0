@@ -18,6 +18,7 @@
 
 package com.atrainingtracker.banalservice.devices;
 
+import android.app.Activity;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -35,7 +36,7 @@ import java.util.EnumMap;
 import java.util.List;
 
 
-public abstract class MyDevice {
+public abstract class MyDevice{
     private static final boolean DEBUG = BANALService.DEBUG & false;
     private final IntentFilter resetAccumulatorsFilter = new IntentFilter(BANALService.RESET_ACCUMULATORS_INTENT);
     protected Context mContext;

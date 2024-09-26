@@ -40,12 +40,21 @@ import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentTransaction;
 import androidx.core.view.GravityCompat;
 import androidx.drawerlayout.widget.DrawerLayout;
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.GoogleApiAvailability;
+import com.google.android.gms.tasks.OnSuccessListener;
+import com.google.android.gms.tasks.Task;
+import android.app.Dialog;
+import android.content.Context;
+
 import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.ActionBarDrawerToggle;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.preference.PreferenceFragmentCompat;
 import androidx.preference.PreferenceScreen;
 import androidx.appcompat.widget.Toolbar;
+
+import android.os.Looper;
 import android.util.Log;
 import android.view.MenuItem;
 import android.view.WindowManager;
@@ -110,7 +119,6 @@ import com.google.android.gms.common.GooglePlayServicesUtil;
 
 import java.util.LinkedList;
 import java.util.List;
-import android.os.Looper;
 
 // import android.support.v7.app.AlertDialog;
 
@@ -137,10 +145,9 @@ public class MainActivityWithNavigation
     private static final String CLIENT_ID = "client_id";
     public static final String SELECTED_FRAGMENT_ID = "SELECTED_FRAGMENT_ID";
     public static final String SELECTED_FRAGMENT = "SELECTED_FRAGMENT";
-    private static final String TAG = "com.atrainingtracker.trainingtracker.MainActivityWithNavigation";
+    private static final String TAG = "MainActivityWithNavigat";
     private static final boolean DEBUG = TrainingApplication.DEBUG && false;
     private static final int DEFAULT_SELECTED_FRAGMENT_ID = R.id.drawer_start_tracking;
-
     // private static final int REQUEST_ENABLE_BLUETOOTH            = 1;
     private static final int REQUEST_INSTALL_GOOGLE_PLAY_SERVICE = 2;
     private static final int MY_PERMISSIONS_REQUEST_ACCESS_FINE_LOCATION = 1;
@@ -313,18 +320,22 @@ public class MainActivityWithNavigation
             }
         }
 
-        // TODO: better place for this code?
-        // PROBLEM: when play service is not installed, DeviceManager will start the unfiltered GPS.
-        //          when then the play service is installed, the DeviceManager will not use the newly available filtered GPS stuff
+        // Check whether Google Play Services are available
+        GoogleApiAvailability googleApiAvailability = GoogleApiAvailability.getInstance();
+        int resultCode = googleApiAvailability.isGooglePlayServicesAvailable(this);
 
-        // check whether the google play service utils are installed
-        Dialog dialog = GooglePlayServicesUtil.getErrorDialog(GooglePlayServicesUtil.isGooglePlayServicesAvailable(this), this, REQUEST_INSTALL_GOOGLE_PLAY_SERVICE);
-        if (dialog != null) {  // so there is a problem with the Google Play Service
-            // since there is no 'no' and 'do not ask again' button, we show this only several times, see the corresponding function of TrainingApplication
-            if (TrainingApplication.showInstallPlayServicesDialog()) {
-                dialog.show();
+        if (resultCode != ConnectionResult.SUCCESS) {
+            // There is a problem with Google Play Services
+            Dialog dialog = googleApiAvailability.getErrorDialog(this, resultCode, REQUEST_INSTALL_GOOGLE_PLAY_SERVICE);
+
+            if (dialog != null) {
+                // Show the dialog only if the user should see it, based on your custom logic
+                if (TrainingApplication.showInstallPlayServicesDialog()) {
+                    dialog.show();
+                }
             }
         }
+
     }
 
     @Override
@@ -966,11 +977,7 @@ public class MainActivityWithNavigation
     private void publishMessage(String topic, String message){
         Toast.makeText(this, "Publishing message " + message, Toast.LENGTH_SHORT).show();
         mqttHandler.publish(topic, message);
-        if (mqttHandler != null) {
-            mqttHandler.publish(topic, message);
-        }
         Log.d("PUBLISH", "string has been published");
-
     }
 
     private void subscribeToTopic(String topic){
