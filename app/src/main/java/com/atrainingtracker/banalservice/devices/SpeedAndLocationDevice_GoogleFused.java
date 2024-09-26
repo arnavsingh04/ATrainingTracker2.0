@@ -18,29 +18,32 @@
 
 package com.atrainingtracker.banalservice.devices;
 
+import android.Manifest;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.location.Location;
 import android.os.Bundle;
+import android.os.Looper;
 import android.util.Log;
+
+import androidx.core.app.ActivityCompat;
 
 import com.atrainingtracker.banalservice.BANALService;
 import com.atrainingtracker.banalservice.sensor.MySensorManager;
-import com.google.android.gms.common.ConnectionResult;
-import com.google.android.gms.common.api.GoogleApiClient;
-import com.google.android.gms.location.LocationListener;
+import com.google.android.gms.location.FusedLocationProviderClient;
+import com.google.android.gms.location.LocationCallback;
 import com.google.android.gms.location.LocationRequest;
+import com.google.android.gms.location.LocationResult;
 import com.google.android.gms.location.LocationServices;
 
-public class SpeedAndLocationDevice_GoogleFused extends SpeedAndLocationDevice
-        implements GoogleApiClient.ConnectionCallbacks,
-        GoogleApiClient.OnConnectionFailedListener,
-        LocationListener {
+public class SpeedAndLocationDevice_GoogleFused extends SpeedAndLocationDevice {
+
     private static final String TAG = "SAND_GoogleFused";
     private static final boolean DEBUG = BANALService.DEBUG & false;
 
-    protected GoogleApiClient mGoogleApiClient;
-
-    protected LocationRequest mLocationRequest;
+    private FusedLocationProviderClient fusedLocationClient;
+    private LocationRequest mLocationRequest;
+    private LocationCallback mLocationCallback;
 
     public SpeedAndLocationDevice_GoogleFused(Context context, MySensorManager mySensorManager) {
         super(context, mySensorManager, DeviceType.SPEED_AND_LOCATION_GOOGLE_FUSED);
@@ -48,59 +51,62 @@ public class SpeedAndLocationDevice_GoogleFused extends SpeedAndLocationDevice
             Log.d(TAG, "constructor");
         }
 
-        mGoogleApiClient = new GoogleApiClient.Builder(context)
-                .addApi(LocationServices.API)
-                .addConnectionCallbacks(this)
-                .addOnConnectionFailedListener(this)
-                .build();
+        // Initialize FusedLocationProviderClient
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(context);
 
+        // Set up the location request
         mLocationRequest = LocationRequest.create();
         mLocationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
         mLocationRequest.setInterval(SAMPLING_TIME);
 
-        // Connect the client.
-        mGoogleApiClient.connect();
+        // Set up the location callback
+        mLocationCallback = new LocationCallback() {
+            @Override
+            public void onLocationResult(LocationResult locationResult) {
+                if (locationResult == null) {
+                    return;
+                }
+                for (Location location : locationResult.getLocations()) {
+                    onNewLocation(location);
+                }
+            }
+        };
+
+        // Request location updates
+        startLocationUpdates();
     }
 
     @Override
     public String getName() {
-        return "google_fused";   // here, we do not use R.string to be compatible with the old (pre 3.8) way
+        return "google_fused"; // Keeping compatibility with the old way
     }
 
+    // Start requesting location updates
+    private void startLocationUpdates() {
+        if (ActivityCompat.checkSelfPermission(mContext, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
+                ActivityCompat.checkSelfPermission(mContext, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            // Request permissions if they are not granted
+            return;
+        }
 
-    @Override
-    public void onConnected(Bundle dataBundle) {
-        if (DEBUG) Log.d(TAG, "onConnected()");
-
-        LocationServices.FusedLocationApi.requestLocationUpdates(mGoogleApiClient, mLocationRequest, this);
+        fusedLocationClient.requestLocationUpdates(mLocationRequest, mLocationCallback, Looper.getMainLooper());
     }
-
-
-    @Override
-    public void onConnectionSuspended(int i) {
-        Log.i(TAG, "GoogleApiClient connection has been suspend");
-
-        LocationUnavailable();
-    }
-
-    @Override
-    public void onConnectionFailed(ConnectionResult connectionResult) {
-        Log.i(TAG, "GoogleApiClient connection has failed");
-    }
-
-
-    @Override
-    public void onLocationChanged(Location location) {
-        if (DEBUG) Log.d(TAG, "onLocationChanged");
-        onNewLocation(location);
-    }
-
 
     @Override
     public void shutDown() {
-        mGoogleApiClient.disconnect();
+        if (fusedLocationClient != null) {
+            fusedLocationClient.removeLocationUpdates(mLocationCallback);
+        }
 
         super.shutDown();
     }
 
+    // Handle when location is updated
+    public void onNewLocation(Location location) {
+        if (DEBUG) {
+            Log.d(TAG, "onLocationChanged");
+        }
+        // Handle new location
+        super.onNewLocation(location);
+    }
 }

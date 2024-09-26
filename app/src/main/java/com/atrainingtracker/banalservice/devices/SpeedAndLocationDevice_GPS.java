@@ -18,12 +18,16 @@
 
 package com.atrainingtracker.banalservice.devices;
 
+import android.Manifest;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.Bundle;
 import android.util.Log;
+
+import androidx.core.app.ActivityCompat;
 
 import com.atrainingtracker.banalservice.BANALService;
 import com.atrainingtracker.banalservice.sensor.MySensorManager;
@@ -34,8 +38,7 @@ public class SpeedAndLocationDevice_GPS extends SpeedAndLocationDevice
     private static final String TAG = "SAND_GPS";
     private static final boolean DEBUG = BANALService.DEBUG & false;
 
-
-    LocationManager mLocationManager;
+    private LocationManager mLocationManager;
 
     public SpeedAndLocationDevice_GPS(Context context, MySensorManager mySensorManager) {
         super(context, mySensorManager, DeviceType.SPEED_AND_LOCATION_GPS);
@@ -44,6 +47,15 @@ public class SpeedAndLocationDevice_GPS extends SpeedAndLocationDevice
         }
 
         mLocationManager = (LocationManager) context.getSystemService(Context.LOCATION_SERVICE);
+
+        // Check if permissions are granted
+        if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+                && ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            Log.e(TAG, "Location permissions are not granted.");
+            // Handle permission not granted, potentially request permissions
+            return;
+        }
+
         mLocationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, SAMPLING_TIME, MIN_DISTANCE, this);
     }
 
@@ -54,8 +66,12 @@ public class SpeedAndLocationDevice_GPS extends SpeedAndLocationDevice
 
     @Override
     public void shutDown() {
+        if (ActivityCompat.checkSelfPermission(mContext, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+                && ActivityCompat.checkSelfPermission(mContext, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            Log.e(TAG, "Location permissions are not granted.");
+            return;
+        }
         mLocationManager.removeUpdates(this);
-
         super.shutDown();
     }
 
@@ -69,6 +85,13 @@ public class SpeedAndLocationDevice_GPS extends SpeedAndLocationDevice
         if (DEBUG) Log.d(TAG, "onProviderEnabled: " + provider);
         if (provider.equals(LocationManager.GPS_PROVIDER)) {
             if (DEBUG) Log.d(TAG, "GPS location provider enabled");
+
+            if (ActivityCompat.checkSelfPermission(mContext, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+                    && ActivityCompat.checkSelfPermission(mContext, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                Log.e(TAG, "Location permissions are not granted.");
+                return;
+            }
+
             mLocationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, SAMPLING_TIME, MIN_DISTANCE, this);
         }
     }
@@ -77,18 +100,21 @@ public class SpeedAndLocationDevice_GPS extends SpeedAndLocationDevice
     public void onProviderDisabled(String provider) {
         if (provider.equals(LocationManager.GPS_PROVIDER)) {
             if (DEBUG) Log.d(TAG, "GPS location provider disabled");
+
+            if (ActivityCompat.checkSelfPermission(mContext, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+                    && ActivityCompat.checkSelfPermission(mContext, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                Log.e(TAG, "Location permissions are not granted.");
+                return;
+            }
+
             mLocationManager.removeUpdates(this);
             LocationUnavailable();
         }
     }
 
-
     @Override
     public void onLocationChanged(Location location) {
         if (DEBUG) Log.i(TAG, "onLocationChanged");
-
         onNewLocation(location);
-
     }
-
 }
