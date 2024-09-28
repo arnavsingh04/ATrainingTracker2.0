@@ -128,6 +128,8 @@ import com.dropbox.core.android.Auth;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GooglePlayServicesUtil;
 
+import org.apache.commons.logging.LogFactory;
+
 import java.util.LinkedList;
 import java.util.List;
 
@@ -152,6 +154,7 @@ public class MainActivityWithNavigation
         StarredSegmentsListFragment.StartSegmentDetailsActivityInterface,
         StartOrResumeInterface {
     private static final String BROKER_URL = "tcp://101.119.143.227";
+    private static final org.apache.commons.logging.Log log = LogFactory.getLog(MainActivityWithNavigation.class);
     private MqttHandler mqttHandler;
     private static final String CLIENT_ID = "client_id";
     public static final String SELECTED_FRAGMENT_ID = "SELECTED_FRAGMENT_ID";
@@ -299,9 +302,6 @@ public class MainActivityWithNavigation
         if (!TrainingApplication.havePermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, MY_PERMISSIONS_REQUEST_WRITE_EXTERNAL_STORAGE);
         }
-        // if (!TrainingApplication.havePermission(Manifest.permission.READ_PHONE_STATE)) {
-        //     ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_PHONE_STATE}, MY_PERMISSIONS_REQUEST_READ_PHONE_STATE);
-        // }
 
         // check ANT+ installation
         if (TrainingApplication.checkANTInstallation() && BANALService.isANTProperlyInstalled(this)) {
@@ -479,13 +479,7 @@ public class MainActivityWithNavigation
         if (locationManager != null && locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
             // Request location updates from the GPS provider
             if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                // TODO: Consider calling
-                //    ActivityCompat#requestPermissions
-                // here to request the missing permissions, and then overriding
-                //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
-                //                                          int[] grantResults)
-                // to handle the case where the user grants the permission. See the documentation
-                // for ActivityCompat#requestPermissions for more details.
+                Log.d("Missing Permission", "The location permission is missing");
                 return;
             }
             locationManager.requestLocationUpdates(
@@ -645,9 +639,6 @@ public class MainActivityWithNavigation
         switch (requestCode) {
             case REQUEST_INSTALL_GOOGLE_PLAY_SERVICE:
                 if (GooglePlayServicesUtil.isGooglePlayServicesAvailable(this) == ConnectionResult.SUCCESS) {
-                    // Google Play services are now available
-                    // Initialize your services here, e.g., GoogleApiClient
-                    // For example:
                     GoogleApiClient googleApiClient = new GoogleApiClient.Builder(this)
                             .addApi(LocationServices.API)
                             .addConnectionCallbacks(new GoogleApiClient.ConnectionCallbacks() {
@@ -769,10 +760,6 @@ public class MainActivityWithNavigation
         mPreviousMenuItem = menuItem;
         menuItem.setChecked(true);
 
-        // just for debugging
-        // if (DEBUG) Toast.makeText(getApplicationContext(), menuItem.getTitle(), Toast.LENGTH_SHORT).show();
-
-        // save
         mSelectedFragmentId = menuItem.getItemId();
 
         mFragment = null;
@@ -804,22 +791,12 @@ public class MainActivityWithNavigation
 
             case R.id.drawer_pairing_ant:
                 titleId = R.string.pairing_ANT;
-                // fragment = DeviceTypeChoiceFragment.newInstance(Protocol.ANT_PLUS);
-                // tag = DeviceTypeChoiceFragment.TAG;
-
-                // Log.i(TAG, "PluginVersionString=" + AntPluginPcc.getInstalledPluginsVersionString(this));
-                // Log.i(TAG, "MissingDependencyName=" + AntPluginPcc.getMissingDependencyName());
-                // Log.i(TAG, "MissingDependencyPackageName=" + AntPluginPcc.getMissingDependencyPackageName());
-                // Log.i(TAG, "PATH_ANTPLUS_PLUGIN_PKG=" + AntPluginPcc.PATH_ANTPLUS_PLUGINS_PKG);
-
                 mFragment = RemoteDevicesFragmentTabbedContainer.newInstance(Protocol.ANT_PLUS);
                 tag = DeviceTypeChoiceFragment.TAG;
                 break;
 
             case R.id.drawer_pairing_BTLE:
                 titleId = R.string.pairing_bluetooth;
-                // fragment = DeviceTypeChoiceFragment.newInstance(Protocol.BLUETOOTH_LE);
-                // tag = DeviceTypeChoiceFragment.TAG;
                 mFragment = RemoteDevicesFragmentTabbedContainer.newInstance(Protocol.BLUETOOTH_LE);
                 tag = DeviceTypeChoiceFragment.TAG;
                 break;
@@ -857,7 +834,6 @@ public class MainActivityWithNavigation
         if (mFragment != null) {
             FragmentTransaction fragmentTransaction = getSupportFragmentManager().beginTransaction();
             fragmentTransaction.replace(R.id.content, mFragment, tag);
-            // if (addToBackStack) { fragmentTransaction.addToBackStack(null); }
             fragmentTransaction.commit();
         }
         setTitle(titleId);
@@ -883,7 +859,6 @@ public class MainActivityWithNavigation
     public boolean onOptionsItemSelected(MenuItem item) {
         if (DEBUG) Log.i(TAG, "onOptionsItemSelected");
 
-        // Log.d(TAG, "onOptionsItemSelected");
         switch (item.getItemId()) {
             case android.R.id.home:
                 mDrawerLayout.openDrawer(GravityCompat.START);
@@ -921,12 +896,6 @@ public class MainActivityWithNavigation
         if (DEBUG) Log.i(TAG, "enableBluetoothRequest");
 
         showEnableBluetoothDialog();
-
-//        Intent enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
-//        enableBtIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-//        startActivityForResult(enableBtIntent, REQUEST_ENABLE_BLUETOOTH);
-
-
     }
 
     @Override
@@ -1065,9 +1034,6 @@ public class MainActivityWithNavigation
         } else if (key.equals("display")) {
             fragment = new DisplayFragment();
         }
-        // else if (key.equals("smoothing")) {
-        //     fragment = new SmoothingFragment();
-        // }
         else if (key.equals("search_settings")) {
             fragment = new SearchFragment();
         } else if (key.equals(TrainingApplication.PREF_KEY_START_SEARCH)) {
@@ -1136,7 +1102,8 @@ public class MainActivityWithNavigation
         if (DEBUG) Log.i(TAG, "disconnectFromBANALService");
 
         if (mBanalServiceComm != null) {
-            unbindService(mBanalConnection);                                                        // TODO: on some devices, an exception is thrown here
+            // on some devices an exception is thrown here - look into that
+            unbindService(mBanalConnection);
             mBanalServiceComm = null;
         }
     }
