@@ -153,7 +153,7 @@ public class MainActivityWithNavigation
         StartAndTrackingFragmentTabbedContainer.UpdateActivityTypeInterface,
         StarredSegmentsListFragment.StartSegmentDetailsActivityInterface,
         StartOrResumeInterface {
-    private static final String BROKER_URL = "tcp://101.119.143.227";
+    private static final String BROKER_URL = "tcp://127.0.0.1:1883";
     private static final org.apache.commons.logging.Log log = LogFactory.getLog(MainActivityWithNavigation.class);
     private MqttHandler mqttHandler;
     private static final String CLIENT_ID = "client_id";
